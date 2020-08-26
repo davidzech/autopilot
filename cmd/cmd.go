@@ -28,6 +28,7 @@ var rootCmd = &cobra.Command{
 		e := engine.New()
 		return e.Run(shell, file)
 	},
+	Version: Version,
 }
 
 func init() {
