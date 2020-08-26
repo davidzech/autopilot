@@ -23,7 +23,7 @@ Flags:
 
 ## Hashbang
 
-Autopilot is invokable via hashbang
+Autopilot is invocable via hashbang
 
 ```sh
 #!autopilot --shell=/bin/sh
