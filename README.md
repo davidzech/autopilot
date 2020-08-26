@@ -1,13 +1,13 @@
 # Autopilot
 
-Fearlessly present your command line demos with precision. Inspired by [Hackertyper](http://hackertyper.com)
+Fearlessly present your command line demos with precision. Inspired by [Hackertyper](http://hackertyper.com).
 
 ![Demonstration](media/demo.gif)
 
 ## Usage
 
 ```console
-→ autopilot.sh --help
+→ autopilot --help
 A tool that automatically types your script into a new instance of your shell via PTY. 
                         When you press a key, the next character of your script is entered into the PTY. Newlines are only consumed when you press [enter].
 
