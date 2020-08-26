@@ -1,3 +1,7 @@
+// Copyright 2011 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 // +build aix darwin dragonfly freebsd linux,!appengine netbsd openbsd
 
 package term
@@ -18,13 +22,12 @@ func IsTerminal(fd int) bool {
 }
 
 func MakeRaw(fd int) (*State, error) {
-	termios, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
+	state, err := GetState(fd)
 	if err != nil {
 		return nil, err
 	}
-
-	oldState := State{termios: *termios}
-
+	oldState := state.Copy()
+	termios := &state.termios
 	// This attempts to replicate the behaviour documented for cfmakeraw in
 	// the termios(3) manpage.
 	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
@@ -34,7 +37,7 @@ func MakeRaw(fd int) (*State, error) {
 	termios.Cflag |= unix.CS8
 	termios.Cc[unix.VMIN] = 1
 	termios.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(fd, unix.TIOCSETA, termios); err != nil {
+	if err := unix.IoctlSetTermios(fd, ioctlWriteTermios, termios); err != nil {
 		return nil, err
 	}
 
@@ -57,7 +60,7 @@ func (s State) Copy() State {
 }
 
 func GetState(fd int) (*State, error) {
-	termios, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
 	if err != nil {
 		return nil, err
 	}
@@ -66,5 +69,5 @@ func GetState(fd int) (*State, error) {
 }
 
 func Restore(fd int, state *State) error {
-	return unix.IoctlSetTermios(int(fd), unix.TIOCSETA, &state.termios)
+	return unix.IoctlSetTermios(int(fd), ioctlWriteTermios, &state.termios)
 }
