@@ -2,6 +2,8 @@
 
 Fearlessly present your command line demos with precision. Inspired by [Hackertyper](http://hackertyper.com)
 
+![Demonstration](media/demo.gif)
+
 ## Usage
 
 ```console
