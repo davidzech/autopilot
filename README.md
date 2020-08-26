@@ -17,7 +17,7 @@ Usage:
 
 Flags:
   -h, --help           help for autopilot
-  -s, --shell string   Shell to use for execution (default "/bin/zsh")
+  -s, --shell string   Shell to use for execution (default "${SHELL}")
 
 ```
 
