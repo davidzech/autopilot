@@ -25,7 +25,8 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		defer file.Close()
-		return engine.ExecuteScript(shell, file)
+		e := engine.New()
+		return e.Run(shell, file)
 	},
 }
 

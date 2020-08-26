@@ -3,6 +3,7 @@
 package term
 
 import (
+	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/unix"
 )
 
@@ -10,6 +11,10 @@ const EOT = 0x4
 
 type State struct {
 	termios unix.Termios
+}
+
+func IsTerminal(fd int) bool {
+	return terminal.IsTerminal(fd)
 }
 
 func MakeRaw(fd int) (*State, error) {

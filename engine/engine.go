@@ -1,91 +1,120 @@
 package engine
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	"github.com/creack/pty"
 	"github.com/davidzech/autopilot/term"
 )
 
-func ExecuteScript(shell string, r io.Reader) error {
-	fmt.Printf("autopilot: [Engaged]\r\n")
+type Engine struct {
+	shell         string
+	script        io.Reader
+	cruiseControl bool
+	rawMode       bool
+	stdin         *os.File
+	stdout        *os.File
+	environ       []string
+}
 
-	cmd := exec.Command(shell)
-	cmd.Env = os.Environ()
-	tty, err := pty.Start(cmd)
+type Option func(e *Engine)
+
+func CruiseControl(cc bool) Option {
+	return func(e *Engine) {
+		e.cruiseControl = cc
+	}
+}
+
+func Stdin(stdin *os.File) Option {
+	return func(e *Engine) {
+		e.stdin = stdin
+	}
+}
+
+func RawMode(rm bool) Option {
+	return func(e *Engine) {
+		e.rawMode = rm
+	}
+}
+
+func Environ(environ []string) Option {
+	return func(e *Engine) {
+		e.environ = environ
+	}
+}
+
+func New(options ...Option) *Engine {
+	var engine Engine = Engine{
+		cruiseControl: false,
+		rawMode:       true,
+		environ:       os.Environ(),
+		stdin:         os.Stdin,
+		stdout:        os.Stdout,
+	}
+	for _, opt := range options {
+		opt(&engine)
+	}
+	return &engine
+}
+
+func (e *Engine) Run(shell string, script io.Reader) error {
+	e.printEngaged()
+	defer e.printDisengaged()
+
+	restore, err := e.prepareStdin()
 	if err != nil {
 		return err
 	}
-
-	fd := int(os.Stdin.Fd())
-	state, err := term.MakeRaw(fd)
-	if err != nil {
-		return err
-	}
+	defer restore()
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		<-c
-		_ = term.Restore(fd, state)
+		restore()
 		os.Exit(0)
 	}()
-	defer func() {
-		_ = term.Restore(fd, state)
-	}()
 
-	script := bufio.NewScanner(r)
+	switch e.cruiseControl {
+	case true:
+		return e.runCruiseControl(shell, script)
 
-	go func() {
-		for script.Scan() {
-			s := script.Text() + "\n"
-			if err == io.EOF {
-				break
-			}
-			if s == "" || s == "\n" {
-				continue
-			}
-			if strings.HasPrefix(s, "#!") {
-				continue
-			}
-			// got a string, consume from stdin until we find a \n
-			for {
-				var buf [1]byte
-				_, err := os.Stdin.Read(buf[:])
+	case false:
+		return e.runHackerTyper(shell, script)
 
-				if err != nil {
-					panic(err)
-				}
-
-				if s != "\n" {
-					_, err = tty.Write([]byte(s[0:1]))
-					if err != nil {
-						panic(err)
-					}
-					s = s[1:]
-				} else if buf[0] == '\r' || buf[0] == '\n' {
-					_, err = tty.Write(buf[:])
-					if err != nil {
-						panic(err)
-					}
-					break
-				}
-			}
-		}
-		// done reading our script file, EOT
-		_, _ = tty.Write([]byte{term.EOT})
-	}()
-	_, err = io.Copy(os.Stdout, tty)
-	if err != nil {
-		return err
 	}
-	fmt.Printf("\r\nautopilot: [Disengaged]\r\n")
+
 	return nil
+}
+
+func (e *Engine) printEngaged() {
+	fmt.Fprint(e.stdout, "autopilot: [Engaged]\r\n")
+}
+
+func (e *Engine) printDisengaged() {
+	fmt.Fprint(e.stdout, "\r\nautopilot: [Disengaged]\r\n")
+}
+
+func (e *Engine) prepareStdin() (restore func(), err error) {
+	if !e.rawMode {
+		return func() {}, nil
+	}
+
+	fd := int(e.stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return func() {}, errors.New("not a terminal")
+	}
+
+	state, err := term.MakeRaw(fd)
+	if err != nil {
+		return func() {}, err
+	}
+
+	return func() {
+		_ = term.Restore(fd, state)
+	}, nil
 }
