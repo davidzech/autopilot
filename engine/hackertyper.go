@@ -3,8 +3,11 @@ package engine
 import (
 	"bufio"
 	"io"
+	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/creack/pty"
 	"github.com/davidzech/autopilot/term"
@@ -13,10 +16,20 @@ import (
 func (e *Engine) runHackerTyper(shell string, r io.Reader) error {
 	cmd := exec.Command(shell)
 	cmd.Env = e.environ
-	tty, err := pty.Start(cmd)
+	myPty, err := pty.Start(cmd)
 	if err != nil {
 		return err
 	}
+	defer myPty.Close()
+	c := make(chan os.Signal, 1)
+	defer close(c)
+	signal.Notify(c, syscall.SIGWINCH)
+	go func() {
+		for range c {
+			_ = pty.InheritSize(os.Stdin, myPty)
+		}
+	}()
+	c <- syscall.SIGWINCH
 
 	script := bufio.NewScanner(r)
 
@@ -42,13 +55,13 @@ func (e *Engine) runHackerTyper(shell string, r io.Reader) error {
 				}
 
 				if s != "" {
-					_, err = tty.Write([]byte(s[0:1]))
+					_, err = myPty.Write([]byte(s[0:1]))
 					if err != nil {
 						panic(err)
 					}
 					s = s[1:]
 				} else if buf[0] == '\r' || buf[0] == '\n' {
-					_, err = tty.Write(buf[:])
+					_, err = myPty.Write(buf[:])
 					if err != nil {
 						panic(err)
 					}
@@ -57,9 +70,9 @@ func (e *Engine) runHackerTyper(shell string, r io.Reader) error {
 			}
 		}
 		// done reading our script file, EOT
-		_, _ = tty.Write([]byte{term.EOT})
+		_, _ = myPty.Write([]byte{term.EOT})
 	}()
-	_, err = io.Copy(e.stdout, tty)
+	_, err = io.Copy(e.stdout, myPty)
 	if err != nil {
 		return err
 	}
